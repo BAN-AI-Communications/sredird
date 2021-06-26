@@ -1,4 +1,4 @@
-/* Copyright (c) 2020, Michael Santos <michael.santos@gmail.com>
+/* Copyright (c) 2020-2021, Michael Santos <michael.santos@gmail.com>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -48,7 +48,7 @@
                offsetof(struct seccomp_data, args[(_arg_nr)])),                \
       BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, (_arg_val), 0, 1),                   \
       BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW), /* reload syscall number;  \
-                                                       all rules expect it in                                                            \
+                                                       all rules expect it in  \
                                                        accumulator */          \
       BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, nr))
 
@@ -82,7 +82,7 @@ int restrict_process_init() {
       /* Load the syscall number for checking. */
       BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, nr)),
 
-/* Syscalls to allow */
+  /* Syscalls to allow */
 
 #ifdef __NR_close
       SC_ALLOW(close),
@@ -133,14 +133,11 @@ int restrict_process_init() {
 #ifdef __NR_read
       SC_ALLOW(read),
 #endif
-#ifdef __NR__newselect
-      SC_ALLOW(_newselect),
+#ifdef __NR_poll
+      SC_ALLOW(poll),
 #endif
-#ifdef __NR_select
-      SC_ALLOW(select),
-#endif
-#ifdef __NR_pselect6
-      SC_ALLOW(pselect6),
+#ifdef __NR_ppoll
+      SC_ALLOW(ppoll),
 #endif
 
 #ifdef __NR_write
@@ -172,7 +169,7 @@ int restrict_process_init() {
   return prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog);
 }
 
-int restrict_process_stdio() {
+int restrict_process_stdio(int devicefd) {
   struct sock_filter filter[] = {
       /* Ensure the syscall arch convention is as expected. */
       BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, arch)),
@@ -181,7 +178,7 @@ int restrict_process_stdio() {
       /* Load the syscall number for checking. */
       BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, nr)),
 
-/* Syscalls to allow */
+  /* Syscalls to allow */
 
 #ifdef __NR_close
       SC_ALLOW(close),
@@ -215,14 +212,11 @@ int restrict_process_stdio() {
 #ifdef __NR_read
       SC_ALLOW(read),
 #endif
-#ifdef __NR__newselect
-      SC_ALLOW(_newselect),
+#ifdef __NR_poll
+      SC_ALLOW(poll),
 #endif
-#ifdef __NR_select
-      SC_ALLOW(select),
-#endif
-#ifdef __NR_pselect6
-      SC_ALLOW(pselect6),
+#ifdef __NR_ppoll
+      SC_ALLOW(ppoll),
 #endif
 
 #ifdef __NR_write
@@ -243,6 +237,8 @@ int restrict_process_stdio() {
       .len = (unsigned short)(sizeof(filter) / sizeof(filter[0])),
       .filter = filter,
   };
+
+  (void)devicefd;
 
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) < 0)
     return -1;

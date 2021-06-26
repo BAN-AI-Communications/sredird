@@ -4,7 +4,7 @@
     Copyright (C) 1999 - 2003 InfoTecna s.r.l.
     Copyright (C) 2001, 2002 Trustees of Columbia University
     in the City of New York
-    Copyright (C) 2020 Michael Santos <michael.santos@gmail.com>
+    Copyright (C) 2020-2021 Michael Santos <michael.santos@gmail.com>
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,10 +20,6 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
-
-/* Return NoError, which is 0, on success */
-
-/* Standard library includes */
 #include <sys/types.h>
 
 #include <err.h>
@@ -33,15 +29,15 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdnoreturn.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/times.h>
 #include <syslog.h>
 #include <termios.h>
 #include <time.h>
@@ -53,11 +49,6 @@
 #define VersionId "2.2.1"
 #define SRedirdVersionId "Version " VersionId ", 20 February 2004"
 
-/* Error conditions constants */
-#define NoError 0
-#define Error 1
-#define OpenError -1
-
 /* Maximum length of temporary strings */
 #define TmpStrLen 255
 
@@ -65,60 +56,64 @@
 #define BufferSize 2048
 
 /* Base Telnet protocol constants (STD 8) */
-#define TNSE ((unsigned char)240)
-#define TNNOP ((unsigned char)241)
-#define TNSB ((unsigned char)250)
-#define TNWILL ((unsigned char)251)
-#define TNWONT ((unsigned char)252)
-#define TNDO ((unsigned char)253)
-#define TNDONT ((unsigned char)254)
-#define TNIAC ((unsigned char)255)
+#define TNSE 240
+#define TNNOP 241
+#define TNSB 250
+#define TNWILL 251
+#define TNWONT 252
+#define TNDO 253
+#define TNDONT 254
+#define TNIAC 255
 
 /* Base Telnet protocol options constants (STD 27, STD 28, STD 29) */
-#define TN_TRANSMIT_BINARY ((unsigned char)0)
-#define TN_ECHO ((unsigned char)1)
-#define TN_SUPPRESS_GO_AHEAD ((unsigned char)3)
+#define TN_TRANSMIT_BINARY 0
+#define TN_ECHO 1
+#define TN_SUPPRESS_GO_AHEAD 3
 
 /* Base Telnet Com Port Control (CPC) protocol constants (RFC 2217) */
-#define TNCOM_PORT_OPTION ((unsigned char)44)
+#define TNCOM_PORT_OPTION 44
 
 /* CPC Client to Access Server constants */
-#define TNCAS_SIGNATURE ((unsigned char)0)
-#define TNCAS_SET_BAUDRATE ((unsigned char)1)
-#define TNCAS_SET_DATASIZE ((unsigned char)2)
-#define TNCAS_SET_PARITY ((unsigned char)3)
-#define TNCAS_SET_STOPSIZE ((unsigned char)4)
-#define TNCAS_SET_CONTROL ((unsigned char)5)
-#define TNCAS_NOTIFY_LINESTATE ((unsigned char)6)
-#define TNCAS_NOTIFY_MODEMSTATE ((unsigned char)7)
-#define TNCAS_FLOWCONTROL_SUSPEND ((unsigned char)8)
-#define TNCAS_FLOWCONTROL_RESUME ((unsigned char)9)
-#define TNCAS_SET_LINESTATE_MASK ((unsigned char)10)
-#define TNCAS_SET_MODEMSTATE_MASK ((unsigned char)11)
-#define TNCAS_PURGE_DATA ((unsigned char)12)
+#define TNCAS_SIGNATURE 0
+#define TNCAS_SET_BAUDRATE 1
+#define TNCAS_SET_DATASIZE 2
+#define TNCAS_SET_PARITY 3
+#define TNCAS_SET_STOPSIZE 4
+#define TNCAS_SET_CONTROL 5
+#define TNCAS_NOTIFY_LINESTATE 6
+#define TNCAS_NOTIFY_MODEMSTATE 7
+#define TNCAS_FLOWCONTROL_SUSPEND 8
+#define TNCAS_FLOWCONTROL_RESUME 9
+#define TNCAS_SET_LINESTATE_MASK 10
+#define TNCAS_SET_MODEMSTATE_MASK 11
+#define TNCAS_PURGE_DATA 12
 
 /* CPC Access Server to Client constants */
-#define TNASC_SIGNATURE ((unsigned char)100)
-#define TNASC_SET_BAUDRATE ((unsigned char)101)
-#define TNASC_SET_DATASIZE ((unsigned char)102)
-#define TNASC_SET_PARITY ((unsigned char)103)
-#define TNASC_SET_STOPSIZE ((unsigned char)104)
-#define TNASC_SET_CONTROL ((unsigned char)105)
-#define TNASC_NOTIFY_LINESTATE ((unsigned char)106)
-#define TNASC_NOTIFY_MODEMSTATE ((unsigned char)107)
-#define TNASC_FLOWCONTROL_SUSPEND ((unsigned char)108)
-#define TNASC_FLOWCONTROL_RESUME ((unsigned char)109)
-#define TNASC_SET_LINESTATE_MASK ((unsigned char)110)
-#define TNASC_SET_MODEMSTATE_MASK ((unsigned char)111)
-#define TNASC_PURGE_DATA ((unsigned char)112)
+#define TNASC_SIGNATURE 100
+#define TNASC_SET_BAUDRATE 101
+#define TNASC_SET_DATASIZE 102
+#define TNASC_SET_PARITY 103
+#define TNASC_SET_STOPSIZE 104
+#define TNASC_SET_CONTROL 105
+#define TNASC_NOTIFY_LINESTATE 106
+#define TNASC_NOTIFY_MODEMSTATE 107
+#define TNASC_FLOWCONTROL_SUSPEND 108
+#define TNASC_FLOWCONTROL_RESUME 109
+#define TNASC_SET_LINESTATE_MASK 110
+#define TNASC_SET_MODEMSTATE_MASK 111
+#define TNASC_PURGE_DATA 112
 
 /* Modem state effective change mask */
-#define ModemStateECMask ((unsigned char)255)
+#define ModemStateECMask 255
 
-#define LineStateECMask ((unsigned char)255)
+#define LineStateECMask 255
 
 /* Default modem state polling in milliseconds (100 msec should be enough) */
 #define ModemStatePolling 100
+
+#define COUNT(_array) (sizeof(_array) / sizeof(_array[0]))
+
+#define DEVICE_FILENO 2
 
 /* Standard boolean definition */
 typedef enum { False, True } Boolean;
@@ -167,18 +162,18 @@ static unsigned char IACCommand[TmpStrLen];
 static size_t IACPos;
 
 /* Modem state mask set by the client */
-static unsigned char ModemStateMask = ((unsigned char)255);
+static unsigned char ModemStateMask = 255;
 
 /* Line state mask set by the client */
-static unsigned char LineStateMask = ((unsigned char)0);
+static unsigned char LineStateMask = 0;
 
 #ifdef COMMENT
 /* Current status of the line control lines */
-static unsigned char LineState = ((unsigned char)0);
+static unsigned char LineState = 0;
 #endif
 
 /* Current status of the modem control lines */
-static unsigned char ModemState = ((unsigned char)0);
+static unsigned char ModemState = 0;
 
 /* Break state flag */
 static Boolean BreakSignaled = False;
@@ -224,13 +219,13 @@ of the syslog(3) system call */
 void LogMsg(int LogLevel, const char *const fmt, ...);
 
 /* Function executed when the program exits */
-void ExitFunction(void);
+static noreturn void ExitFunction(void);
 
 /* Function called on many signals */
-void SignalFunction(int unused);
+static noreturn void SignalFunction(int unused);
 
 /* Function called on break signal */
-void BreakFunction(int unused);
+static noreturn void BreakFunction(int unused);
 
 /* Retrieves the port speed from PortFd */
 unsigned long int GetPortSpeed(int PortFd);
@@ -363,7 +358,7 @@ void PushToBuffer(BufferType *B, unsigned char C) {
 unsigned char GetFromBuffer(BufferType *B) {
   unsigned char C = B->Buffer[B->RdPos];
   B->RdPos = (B->RdPos + 1) % BufferSize;
-  return (C);
+  return C;
 }
 
 /* Generic log function with log level control. Uses the same log levels
@@ -380,34 +375,28 @@ void LogMsg(int LogLevel, const char *const fmt, ...) {
 }
 
 /* Function executed when the program exits */
-void ExitFunction(void) {
+static noreturn void ExitFunction(void) {
   const char *message = "SRedird stopped.\n";
 
   /* Restores initial port settings */
   if (DeviceFd > -1) {
     if (InitPortRetrieved == True)
       tcsetattr(DeviceFd, TCSANOW, &InitialPortSettings);
-
-    /* Closes the device */
-    close(DeviceFd);
   }
 
-  /* Closes the sockets */
-  close(STDIN_FILENO);
-  close(STDOUT_FILENO);
-
   /* Program termination notification */
-  if (MaxLogLevel >= LOG_NOTICE)
+  if (MaxLogLevel >= LOG_NOTICE) {
     /* warning: ignoring return value of ‘write’, declared with attribute
      * warn_unused_result [-Wunused-result] */
     if (write(STDERR_FILENO, message, strlen(message)) == -1) {
     }
+  }
 
   _exit(0);
 }
 
 /* Function called on many signals */
-void SignalFunction(int unused) {
+static noreturn void SignalFunction(int unused) {
   (void)unused;
 
   /* Same as the exit function */
@@ -416,7 +405,7 @@ void SignalFunction(int unused) {
 
 /* Function called on break signal */
 /* Unimplemented yet */
-void BreakFunction(int unused) {
+static noreturn void BreakFunction(int unused) {
 #ifndef COMMENT
   (void)unused;
 
@@ -453,47 +442,47 @@ unsigned long int GetPortSpeed(int PortFd) {
 
   switch (Speed) {
   case B50:
-    return (50UL);
+    return 50UL;
   case B75:
-    return (75UL);
+    return 75UL;
   case B110:
-    return (110UL);
+    return 110UL;
   case B134:
-    return (134UL);
+    return 134UL;
   case B150:
-    return (150UL);
+    return 150UL;
   case B200:
-    return (200UL);
+    return 200UL;
   case B300:
-    return (300UL);
+    return 300UL;
   case B600:
-    return (600UL);
+    return 600UL;
   case B1200:
-    return (1200UL);
+    return 1200UL;
   case B1800:
-    return (1800UL);
+    return 1800UL;
   case B2400:
-    return (2400UL);
+    return 2400UL;
   case B4800:
-    return (4800UL);
+    return 4800UL;
   case B9600:
-    return (9600UL);
+    return 9600UL;
   case B19200:
-    return (19200UL);
+    return 19200UL;
   case B38400:
-    return (38400UL);
+    return 38400UL;
   case B57600:
-    return (57600UL);
+    return 57600UL;
   case B115200:
-    return (115200UL);
+    return 115200UL;
   case B230400:
-    return (230400UL);
+    return 230400UL;
 #ifdef B460800
   case B460800:
-    return (460800UL);
+    return 460800UL;
 #endif
   default:
-    return (0UL);
+    return 0UL;
   }
 }
 
@@ -508,15 +497,15 @@ unsigned char GetPortDataSize(int PortFd) {
 
   switch (DataSize) {
   case CS5:
-    return ((unsigned char)5);
+    return 5;
   case CS6:
-    return ((unsigned char)6);
+    return 6;
   case CS7:
-    return ((unsigned char)7);
+    return 7;
   case CS8:
-    return ((unsigned char)8);
+    return 8;
   default:
-    return ((unsigned char)0);
+    return 0;
   }
 }
 
@@ -528,13 +517,13 @@ unsigned char GetPortParity(int PortFd) {
     err(EXIT_FAILURE, "tcgetattr");
 
   if ((PortSettings.c_cflag & PARENB) == 0)
-    return ((unsigned char)1);
+    return 1;
 
   if ((PortSettings.c_cflag & PARENB) != 0 &&
       (PortSettings.c_cflag & PARODD) != 0)
-    return ((unsigned char)2);
+    return 2;
 
-  return ((unsigned char)3);
+  return 3;
 }
 
 /* Retrieves the stop bits size from PortFd */
@@ -545,9 +534,9 @@ unsigned char GetPortStopSize(int PortFd) {
     err(EXIT_FAILURE, "tcgetattr");
 
   if ((PortSettings.c_cflag & CSTOPB) == 0)
-    return ((unsigned char)1);
-  else
-    return ((unsigned char)2);
+    return 1;
+
+  return 2;
 }
 
 /* Retrieves the flow control status, including DTR and RTS status,
@@ -567,79 +556,72 @@ unsigned char GetPortFlowControl(int PortFd, unsigned char Which) {
   /* Com Port Flow Control Setting (outbound/both) */
   case 0:
     if (PortSettings.c_iflag & IXON)
-      return ((unsigned char)2);
+      return 2;
     if (PortSettings.c_cflag & CRTSCTS)
-      return ((unsigned char)3);
-    return ((unsigned char)1);
-    break;
+      return 3;
+    return 1;
 
   /* BREAK State  */
   case 4:
     if (BreakSignaled == True)
-      return ((unsigned char)5);
-    else
-      return ((unsigned char)6);
-    break;
+      return 5;
+    return 6;
 
   /* DTR Signal State */
   case 7:
     if (MLines & TIOCM_DTR)
-      return ((unsigned char)8);
-    else
-      return ((unsigned char)9);
-    break;
+      return 8;
+    return 9;
 
   /* RTS Signal State */
   case 10:
     if (MLines & TIOCM_RTS)
-      return ((unsigned char)11);
-    else
-      return ((unsigned char)12);
-    break;
+      return 11;
+    return 12;
 
   /* Com Port Flow Control Setting (inbound) */
   case 13:
     if (PortSettings.c_iflag & IXOFF)
-      return ((unsigned char)15);
+      return 15;
     if (PortSettings.c_cflag & CRTSCTS)
-      return ((unsigned char)16);
-    return ((unsigned char)14);
+      return 16;
+    return 14;
 
   default:
     if (PortSettings.c_iflag & IXON)
-      return ((unsigned char)2);
+      return 2;
     if (PortSettings.c_cflag & CRTSCTS)
-      return ((unsigned char)3);
-    return ((unsigned char)1);
+      return 3;
+    return 1;
   }
 }
 
 /* Return the status of the modem control lines (DCD, CTS, DSR, RNG) */
 unsigned char GetModemState(int PortFd, unsigned char PMState) {
   int MLines;
-  unsigned char MState = (unsigned char)0;
+  unsigned char MState = 0;
 
   if (ioctl(PortFd, TIOCMGET, &MLines) < 0)
     err(EXIT_FAILURE, "ioctl(TIOCMGET)");
 
   if ((MLines & TIOCM_CAR) != 0)
-    MState += (unsigned char)128;
+    MState += 128;
   if ((MLines & TIOCM_RNG) != 0)
-    MState += (unsigned char)64;
+    MState += 64;
   if ((MLines & TIOCM_DSR) != 0)
-    MState += (unsigned char)32;
+    MState += 32;
   if ((MLines & TIOCM_CTS) != 0)
-    MState += (unsigned char)16;
+    MState += 16;
   if ((MState & 128) != (PMState & 128))
-    MState += (unsigned char)8;
+    MState += 8;
   if ((MState & 64) != (PMState & 64))
-    MState += (unsigned char)4;
+    MState += 4;
   if ((MState & 32) != (PMState & 32))
-    MState += (unsigned char)2;
+    MState += 2;
   if ((MState & 16) != (PMState & 16))
-    MState += (unsigned char)1;
+    MState += 1;
 
-  return (MState);
+  return MState;
 }
 
 /* Set the serial port data size */
@@ -1506,11 +1488,8 @@ void Usage(void) {
 
 /* Main function */
 int main(int argc, char *argv[]) {
-  /* Input fd set */
-  fd_set InFdSet;
-
-  /* Output fd set */
-  fd_set OutFdSet;
+  /* fd set */
+  struct pollfd fds[3] = {0};
 
   /* Char read */
   unsigned char C;
@@ -1518,14 +1497,8 @@ int main(int argc, char *argv[]) {
   /* Actual port settings */
   struct termios PortSettings;
 
-  /* Base timeout for stream reading */
-  struct timeval BTimeout;
-
-  /* Timeout for stream reading */
-  struct timeval RTimeout;
-
-  /* Pointer to timeout structure to set */
-  struct timeval *ETimeout = &RTimeout;
+  /* Poll interval */
+  int poll_timeout;
 
   /* Remote flow control flag */
   Boolean RemoteFlowOff = False;
@@ -1545,13 +1518,12 @@ int main(int argc, char *argv[]) {
   /* Optional argument processing indexes */
   int ch;
 
-  int rv;
   unsigned int idle_timeout = 0;
 
   struct sigaction act = {0};
 
   if (restrict_process_init() < 0) {
-    return (Error);
+    return EXIT_FAILURE;
   }
 
   DeviceName = "nodev";
@@ -1561,7 +1533,7 @@ int main(int argc, char *argv[]) {
     case 'i':
       if (CiscoIOSCompatible) {
         Usage();
-        return (Error);
+        return EXIT_FAILURE;
       }
       CiscoIOSCompatible = True;
       break;
@@ -1571,7 +1543,7 @@ int main(int argc, char *argv[]) {
     case 'h':
     default:
       Usage();
-      return (Error);
+      return EXIT_FAILURE;
     }
   }
 
@@ -1581,7 +1553,7 @@ int main(int argc, char *argv[]) {
   /* Check the command line argument count */
   if (argc < 2) {
     Usage();
-    return (Error);
+    return EXIT_FAILURE;
   }
 
   /* Sets the log level */
@@ -1591,16 +1563,9 @@ int main(int argc, char *argv[]) {
   DeviceName = argv[1];
 
   /* Retrieve the polling interval */
+  poll_timeout = ModemStatePolling;
   if (argc > 2) {
-    BTimeout.tv_sec = 0;
-    BTimeout.tv_usec = atol(argv[2]) * 1000;
-
-    if (BTimeout.tv_usec <= 0) {
-      ETimeout = NULL;
-    }
-  } else {
-    BTimeout.tv_sec = 0;
-    BTimeout.tv_usec = ModemStatePolling * 1000;
+    poll_timeout = atoi(argv[2]);
   }
 
   /* Logs sredird start */
@@ -1610,43 +1575,41 @@ int main(int argc, char *argv[]) {
   LogMsg(LOG_INFO, "Log level: %i", MaxLogLevel);
 
   /* Logs the polling interval */
-  LogMsg(LOG_INFO, "Polling interval (ms): %u",
-         (unsigned int)(BTimeout.tv_usec / 1000));
+  LogMsg(LOG_INFO, "Polling interval (ms): %d", poll_timeout);
 
   /* Register exit and signal handler functions */
   if (atexit(ExitFunction) != 0)
-    return (Error);
+    return EXIT_FAILURE;
 
   act.sa_handler = SignalFunction;
   (void)sigfillset(&act.sa_mask);
 
   if (sigaction(SIGHUP, &act, NULL) != 0)
-    return (Error);
+    return EXIT_FAILURE;
   if (sigaction(SIGQUIT, &act, NULL) != 0)
-    return (Error);
+    return EXIT_FAILURE;
   if (sigaction(SIGABRT, &act, NULL) != 0)
-    return (Error);
+    return EXIT_FAILURE;
   if (sigaction(SIGPIPE, &act, NULL) != 0)
-    return (Error);
+    return EXIT_FAILURE;
   if (sigaction(SIGTERM, &act, NULL) != 0)
-    return (Error);
+    return EXIT_FAILURE;
   if (sigaction(SIGALRM, &act, NULL) != 0)
-    return (Error);
+    return EXIT_FAILURE;
 
   /* Register the function to be called on break condition */
   act.sa_handler = BreakFunction;
   if (sigaction(SIGINT, &act, NULL) != 0)
-    return (Error);
+    return EXIT_FAILURE;
 
   if (idle_timeout > 0)
     alarm(idle_timeout);
 
   /* Open the device */
-  if ((DeviceFd = open(DeviceName, O_RDWR | O_NOCTTY | O_NDELAY, 0)) ==
-      OpenError) {
+  if ((DeviceFd = open(DeviceName, O_RDWR | O_NOCTTY | O_NDELAY, 0)) == -1) {
     /* Open failed */
     LogMsg(LOG_ERR, "Unable to open device %s. Exiting.", DeviceName);
-    return (Error);
+    return EXIT_FAILURE;
   }
 
   /* Get the actual port settings */
@@ -1670,8 +1633,7 @@ int main(int argc, char *argv[]) {
     err(EXIT_FAILURE, "tcsetattr");
 
   /* Reset the device fd to blocking mode */
-  if (fcntl(DeviceFd, F_SETFL, fcntl(DeviceFd, F_GETFL) & ~(O_NDELAY)) ==
-      OpenError)
+  if (fcntl(DeviceFd, F_SETFL, fcntl(DeviceFd, F_GETFL) & ~(O_NDELAY)) == -1)
     LogMsg(LOG_ERR, "Unable to reset device to non blocking mode, ignoring.");
 
   /* Initialize the input buffer */
@@ -1722,132 +1684,144 @@ int main(int argc, char *argv[]) {
   /* Set up fd sets */
   /* Initially we have to read from all, but we only have data to send
    * to the network */
-  FD_ZERO(&InFdSet);
-  FD_SET(STDIN_FILENO, &InFdSet);
-  FD_SET(DeviceFd, &InFdSet);
-  FD_ZERO(&OutFdSet);
-  FD_SET(STDOUT_FILENO, &OutFdSet);
+  fds[STDIN_FILENO].fd = STDIN_FILENO;
+  fds[STDOUT_FILENO].fd = STDOUT_FILENO;
+  fds[DEVICE_FILENO].fd = DeviceFd;
 
-  /* Set up timeout for modem status polling */
-  if (ETimeout != NULL)
-    *ETimeout = BTimeout;
+  fds[STDIN_FILENO].events = POLLIN;
+  fds[STDOUT_FILENO].events = POLLOUT;
+  fds[DEVICE_FILENO].events = POLLIN;
 
-  if (restrict_process_stdio() < 0) {
-    return (Error);
+  if (restrict_process_stdio(DeviceFd) < 0) {
+    return EXIT_FAILURE;
   }
 
   /* Main loop with fd's control */
   for (;;) {
-    rv = select(DeviceFd + 1, &InFdSet, &OutFdSet, NULL, ETimeout);
-    if (rv < 0 && (errno != EAGAIN && errno != EINTR)) {
-      err(EXIT_FAILURE, "select");
+    if (poll(fds, COUNT(fds), poll_timeout) < 0) {
+      if (errno == EINTR)
+        continue;
+      err(EXIT_FAILURE, "poll");
     }
-    if (rv > 0) {
-      /* Handle buffers in the following order
-       *   Error
-       *   Output
-       *   Input
-       * In other words, ensure we can write, make room, read more data
-       */
 
-      if (FD_ISSET(DeviceFd, &OutFdSet)) {
-        /* Write to serial port */
-        while (!IsBufferEmpty(&ToDevBuf)) {
-          C = GetFromBuffer(&ToDevBuf);
-          switch (write(DeviceFd, &C, 1)) {
-          case 1:
-            if (idle_timeout > 0)
-              alarm(idle_timeout);
-            continue;
-          case 0:
-            LogMsg(LOG_INFO, "EOF");
-            return (NoError);
-          case -1:
-            if (errno == EWOULDBLOCK) {
-              PushToBuffer(&ToDevBuf, C);
-            } else {
-              LogMsg(LOG_NOTICE, "Error writing to device.");
-              return (NoError);
-            }
+    /* Handle buffers in the following order
+     *   Error
+     *   Output
+     *   Input
+     * In other words, ensure we can write, make room, read more data
+     */
+    if (fds[DEVICE_FILENO].revents & POLLOUT) {
+      Boolean b = True;
+
+      /* Write to serial port */
+      while (b && !IsBufferEmpty(&ToDevBuf)) {
+        C = GetFromBuffer(&ToDevBuf);
+        switch (write(DeviceFd, &C, 1)) {
+        case 1:
+          if (idle_timeout > 0)
+            alarm(idle_timeout);
+          break;
+        case 0:
+          LogMsg(LOG_INFO, "EOF");
+          return EXIT_SUCCESS;
+        case -1:
+          if (errno != EAGAIN) {
+            LogMsg(LOG_NOTICE, "Error writing to device.");
+            return EXIT_SUCCESS;
           }
+          PushToBuffer(&ToDevBuf, C);
+          b = False;
           break;
         }
       }
+    }
 
-      if (FD_ISSET(STDOUT_FILENO, &OutFdSet)) {
-        /* Write to network */
-        while (!IsBufferEmpty(&ToNetBuf)) {
-          C = GetFromBuffer(&ToNetBuf);
-          switch (write(STDOUT_FILENO, &C, 1)) {
-          case 1:
-            if (idle_timeout > 0)
-              alarm(idle_timeout);
-            continue;
-          case 0:
-            LogMsg(LOG_INFO, "EOF");
-            return (NoError);
-          case -1:
-            if (errno == EWOULDBLOCK) {
-              PushToBuffer(&ToNetBuf, C);
-            } else {
-              LogMsg(LOG_NOTICE, "Error writing to network.");
-              return (NoError);
-            }
+    if (fds[STDOUT_FILENO].revents & POLLOUT) {
+      Boolean b = True;
+
+      /* Write to network */
+      while (b && !IsBufferEmpty(&ToNetBuf)) {
+        C = GetFromBuffer(&ToNetBuf);
+        switch (write(STDOUT_FILENO, &C, 1)) {
+        case 1:
+          if (idle_timeout > 0)
+            alarm(idle_timeout);
+          break;
+        case 0:
+          LogMsg(LOG_INFO, "EOF");
+          return EXIT_SUCCESS;
+        case -1:
+          if (errno != EAGAIN) {
+            LogMsg(LOG_NOTICE, "Error writing to network.");
+            return EXIT_SUCCESS;
           }
+          PushToBuffer(&ToNetBuf, C);
+          b = False;
           break;
         }
       }
+    }
 
-      if (FD_ISSET(DeviceFd, &InFdSet)) {
-        /* Read from serial port */
-        while (!IsBufferFull(&ToNetBuf)) {
-          switch (read(DeviceFd, &C, 1)) {
-          case 1:
-            EscWriteChar(&ToNetBuf, C);
-            if (idle_timeout > 0)
-              alarm(idle_timeout);
-            continue;
-          case 0:
-            LogMsg(LOG_INFO, "EOF");
-            return (NoError);
-          case -1:
-            if (errno != EWOULDBLOCK) {
-              LogMsg(LOG_NOTICE, "Error reading from device.");
-              return (NoError);
-            }
+    if (fds[DEVICE_FILENO].revents & (POLLIN | POLLERR | POLLNVAL)) {
+      Boolean b = True;
+
+      /* Read from serial port */
+      while (b && !IsBufferFull(&ToNetBuf)) {
+        switch (read(DeviceFd, &C, 1)) {
+        case 1:
+          EscWriteChar(&ToNetBuf, C);
+          if (idle_timeout > 0)
+            alarm(idle_timeout);
+          break;
+        case 0:
+          LogMsg(LOG_INFO, "EOF");
+          return EXIT_SUCCESS;
+        case -1:
+          if (errno != EAGAIN) {
+            LogMsg(LOG_NOTICE, "Error reading from device.");
+            return EXIT_SUCCESS;
           }
+          b = False;
           break;
         }
       }
+    }
 
-      if (FD_ISSET(STDIN_FILENO, &InFdSet)) {
-        /* Read from network */
-        while (!IsBufferFull(&ToDevBuf)) {
-          switch (read(STDIN_FILENO, &C, 1)) {
-          case 1:
-            EscRedirectChar(&ToNetBuf, &ToDevBuf, DeviceFd, C);
-            if (idle_timeout > 0)
-              alarm(idle_timeout);
-            continue;
-          case 0:
-            LogMsg(LOG_INFO, "EOF");
-            return (NoError);
-          case -1:
-            if (errno != EWOULDBLOCK) {
-              LogMsg(LOG_NOTICE, "Error reading from network.");
-              return (NoError);
-            }
+    if (fds[STDIN_FILENO].revents & (POLLIN | POLLERR | POLLNVAL)) {
+      Boolean b = True;
+
+      /* Read from network */
+      while (b && !IsBufferFull(&ToDevBuf)) {
+        switch (read(STDIN_FILENO, &C, 1)) {
+        case 1:
+          EscRedirectChar(&ToNetBuf, &ToDevBuf, DeviceFd, C);
+          if (idle_timeout > 0)
+            alarm(idle_timeout);
+          break;
+        case 0:
+          LogMsg(LOG_INFO, "EOF");
+          return EXIT_SUCCESS;
+        case -1:
+          if (errno != EAGAIN) {
+            LogMsg(LOG_NOTICE, "Error reading from network.");
+            return EXIT_SUCCESS;
           }
+          b = False;
           break;
         }
       }
+    }
 
-      /* Check if the buffer is not full and remote flow is off */
-      if (RemoteFlowOff == True && IsBufferFull(&ToDevBuf) == False) {
-        /* Send a flow control resume command */
-        SendCPCFlowCommand(&ToNetBuf, TNASC_FLOWCONTROL_RESUME);
-        RemoteFlowOff = False;
-      }
+    if ((fds[STDIN_FILENO].revents & POLLHUP) ||
+        (fds[DEVICE_FILENO].revents & POLLHUP)) {
+      return EXIT_SUCCESS;
+    }
+
+    /* Check if the buffer is not full and remote flow is off */
+    if (RemoteFlowOff == True && IsBufferFull(&ToDevBuf) == False) {
+      /* Send a flow control resume command */
+      SendCPCFlowCommand(&ToNetBuf, TNASC_FLOWCONTROL_RESUME);
+      RemoteFlowOff = False;
     }
 
     /* Check the port state and notify the client if it's changed */
@@ -1874,12 +1848,13 @@ int main(int argc, char *argv[]) {
 #endif /* COMMENT */
     }
 
-    /* Resets the fd sets */
-    FD_ZERO(&InFdSet);
+    fds[STDIN_FILENO].events = 0;
+    fds[STDOUT_FILENO].events = 0;
+    fds[DEVICE_FILENO].events = 0;
 
     /* Check if the buffer is not full */
     if (IsBufferFull(&ToDevBuf) == False) {
-      FD_SET(STDIN_FILENO, &InFdSet);
+      fds[STDIN_FILENO].events |= POLLIN;
     } else if (RemoteFlowOff == False) {
       /* Send a flow control suspend command */
       SendCPCFlowCommand(&ToNetBuf, TNASC_FLOWCONTROL_SUSPEND);
@@ -1889,17 +1864,12 @@ int main(int argc, char *argv[]) {
     /* If input flow has been disabled from the remote client
     don't read from the device */
     if (!IsBufferFull(&ToNetBuf) && InputFlow == True)
-      FD_SET(DeviceFd, &InFdSet);
+      fds[DEVICE_FILENO].events |= POLLIN;
 
-    FD_ZERO(&OutFdSet);
     /* Check if there are characters available to write */
     if (!IsBufferEmpty(&ToDevBuf))
-      FD_SET(DeviceFd, &OutFdSet);
+      fds[DEVICE_FILENO].events |= POLLOUT;
     if (!IsBufferEmpty(&ToNetBuf))
-      FD_SET(STDOUT_FILENO, &OutFdSet);
-
-    /* Set up timeout for modem status polling */
-    if (ETimeout != NULL)
-      *ETimeout = BTimeout;
+      fds[STDOUT_FILENO].events |= POLLOUT;
   }
 }
