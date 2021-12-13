@@ -1,21 +1,21 @@
 # SYNOPSIS
 
-sredird *option* *loglevel* *device* [*pollinginterval*]
+sredird _option_ _loglevel_ _device_ [*pollinginterval*]
 
 # DESCRIPTION
 
 sredird is:
 
-* an [RFC 2217](https://datatracker.ietf.org/doc/html/rfc2217) compliant
+- an [RFC 2217](https://datatracker.ietf.org/doc/html/rfc2217) compliant
   serial port redirector
 
-* maps a network port to a serial device: serial port parameters are
+- maps a network port to a serial device: serial port parameters are
   configured using an extension to the telnet protocol
 
-* runs under a [UCSPI](http://cr.yp.to/proto/ucspi.txt) or other inetd
+- runs under a [UCSPI](http://cr.yp.to/proto/ucspi.txt) or other inetd
   style service such as systemd for process level isolation
 
-* restricts process operations using `seccomp(2)`, `pledge(2)`,
+- restricts process operations using `seccomp(2)`, `pledge(2)`,
   `capsicum(4)` or `setrlimit(2)`
 
 sredird can be used as a minimal serial console server on a device like
@@ -36,28 +36,28 @@ later versions of sredird (2.2.1-2) switched to C++.
 apt install daemontools
 ```
 
-* [unixexec](https://github.com/msantos/unixexec)
-* [hexlog](https://github.com/msantos/hexlog)
-* [tscat](https://github.com/msantos/tscat)
+- [unixexec](https://github.com/msantos/unixexec)
+- [hexlog](https://github.com/msantos/hexlog)
+- [tscat](https://github.com/msantos/tscat)
 
 Here is my setup:
 
-* raspberry pi zero w acting as a console server for other raspberry pi's
-* example of setup using unixexec
-* TODO: show example xmppbot
+- raspberry pi zero w acting as a console server for other raspberry pi's
+- example of setup using unixexec
+- TODO: show example xmppbot
 
-~~~ /etc/udev/rules.d/10-usb-serial.rules
+```/etc/udev/rules.d/10-usb-serial.rules
 SUBSYSTEM=="tty", ATTRS{idProduct}=="6001", ATTRS{idVendor}=="0403", ATTRS{serial}=="FTG9GBNY", SYMLINK+="console@getpid"
 SUBSYSTEM=="tty", ATTRS{idProduct}=="2008", ATTRS{idVendor}=="0557", SYMLINK+="console@switch"
 SUBSYSTEM=="tty", ATTRS{idProduct}=="2303", ATTRS{idVendor}=="067b", ATTRS{version}==" 1.10", SYMLINK+="console@getsid"
 SUBSYSTEM=="tty", ATTRS{idProduct}=="2303", ATTRS{idVendor}=="067b", ATTRS{version}==" 2.00", SYMLINK+="console@sigquit"
-~~~
+```
 
 ## service run
 
-* service/console@getpid/run
+- service/console@getpid/run
 
-~~~
+```
 #!/bin/bash
 
 umask 077
@@ -68,13 +68,13 @@ exec 2>&1
 exec unixexec /tmp/sredird/console@getpid \
   hexlog none \
   sredird -t 900 5 /dev/console@getpid
-~~~
+```
 
 ## service run log
 
-* service/console@getpid/log/run
+- service/console@getpid/log/run
 
-~~~
+```
 #!/bin/bash
 
 set -o errexit
@@ -83,7 +83,7 @@ set -o pipefail
 
 SERVICE="$(basename $(dirname $PWD))"
 exec tscat -o 2 "$SERVICE"
-~~~
+```
 
 # USAGE
 
@@ -101,7 +101,7 @@ pollinginterval
 -i, --cisco-compatibility
 : indicates Cisco IOS Bug compatibility
 
--t, --timeout *seconds*
+-t, --timeout _seconds_
 :set inactivity timeout
 
 # BUILDING
@@ -146,7 +146,7 @@ the Free Software Foundation; either version 2 of the License, or
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
