@@ -4,7 +4,8 @@ sredird _option_ _loglevel_ _device_ [*pollinginterval*]
 
 # DESCRIPTION
 
-*sredird* is:
+_sredird_ is:
+
 - an [RFC 2217](https://datatracker.ietf.org/doc/html/rfc2217) compliant
   serial port redirector
 - maps a network port to a serial device: serial port parameters are
@@ -14,7 +15,7 @@ sredird _option_ _loglevel_ _device_ [*pollinginterval*]
 - restricts process operations using `seccomp(2)`, `pledge(2)`,
   `capsicum(4)` or `setrlimit(2)`
 
-*sredird* can be used as a minimal serial console server on a device like
+_sredird_ can be used as a minimal serial console server on a device like
 a Raspberry Pi Zero W.
 
 A [picocom](https://github.com/npat-efault/picocom/tree/rfc2217) branch
@@ -48,9 +49,11 @@ SUBSYSTEM=="tty", ATTRS{idProduct}=="2008", ATTRS{idVendor}=="0557", SYMLINK+="c
 SUBSYSTEM=="tty", ATTRS{idProduct}=="2303", ATTRS{idVendor}=="067b", ATTRS{version}==" 1.10", SYMLINK+="console@getsid"
 SUBSYSTEM=="tty", ATTRS{idProduct}=="2303", ATTRS{idVendor}=="067b", ATTRS{version}==" 2.00", SYMLINK+="console@sigquit"
 ```
+
 ## service run
 
 - `service/console@getpid/run`
+
 ```shell
 #!/bin/bash
 
@@ -67,6 +70,7 @@ exec unixexec /tmp/sredird/console@getpid \
 ## service run log
 
 - `service/console@getpid/log/run`
+
 ```shell
 #!/bin/bash
 
